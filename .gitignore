@@ -1,0 +1,26 @@
+# 数据库文件
+*.db
+
+# 生成的数据文件
+*.xlsx
+*.html
+
+# 导出目录
+export/
+
+# 链接文本（含敏感信息）
+链接.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# 系统文件
+~$*
+Thumbs.db
+.DS_Store
