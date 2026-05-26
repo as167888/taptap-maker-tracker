@@ -169,3 +169,74 @@ def query_detailed():
 
 if __name__ == "__main__":
     query_detailed()
+
+
+def query_history():
+    """查看爬取历史记录"""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # 统计数据
+    cur.execute("SELECT COUNT(*) FROM crawl_history")
+    total = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(DISTINCT crawl_time) FROM crawl_history")
+    run_count = cur.fetchone()[0]
+    cur.execute("SELECT MIN(crawl_time), MAX(crawl_time) FROM crawl_history")
+    time_range = cur.fetchone()
+
+    if total == 0:
+        print("\n暂无爬取历史记录。")
+        conn.close()
+        return
+
+    page = 0
+
+    while True:
+        cur.execute(
+            """SELECT id, game_name, downloads, followers, rating, rating_count, crawl_time
+               FROM crawl_history
+               ORDER BY crawl_time DESC, id DESC
+               LIMIT ? OFFSET ?""",
+            (PAGE_SIZE, page * PAGE_SIZE),
+        )
+        rows = cur.fetchall()
+        total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+
+        print("\n" + "=" * 90)
+        print(f"  爬取历史记录 | 共 {total} 条记录, {run_count} 次爬取")
+        if time_range[0]:
+            print(f"  时间范围: {time_range[0]} ~ {time_range[1]}")
+        print(f"  第 {page + 1}/{total_pages} 页")
+        print("=" * 90)
+
+        if not rows:
+            print("  (无数据)")
+        else:
+            header = f"  {'ID':<5} {'游戏名称':<22} {'下载':<8} {'关注':<8} {'评分':<5} {'评价数':<7} {'爬取时间'}"
+            print(header)
+            print("  " + "-" * 80)
+            for r in rows:
+                name = r["game_name"][:20] if r["game_name"] else "-"
+                dl = str(r["downloads"] or "-")[:7]
+                fw = str(r["followers"] or "-")[:7]
+                rt = str(r["rating"] or "-")[:4]
+                rc = str(r["rating_count"] or "-")[:6]
+                print(f"  {r['id']:<5} {name:<22} {dl:<8} {fw:<8} {rt:<5} {rc:<7} {r['crawl_time']}")
+
+        print("\n  [N]下一页  [P]上一页  [0]返回")
+
+        cmd = input("> ").strip().lower()
+        if cmd == "0":
+            break
+        elif cmd == "n":
+            if page < total_pages - 1:
+                page += 1
+        elif cmd == "p":
+            if page > 0:
+                page -= 1
+
+    conn.close()
+
+
+if __name__ == "__main__":
+    query_detailed()

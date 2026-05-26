@@ -1,6 +1,7 @@
 import sys
 import os
 import shutil
+import argparse
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -13,45 +14,48 @@ from taptap_spider import scrape_taptap
 from taptap_mk_detail import crawl_taptap_games
 from generate_html import excel_to_html
 from init_db import init_db, sync_from_xlsx, reset_all_pending
-from db_query import query_stats, query_detailed
+from db_query import query_stats, query_detailed, query_history
 from import_links import import_links
 
-GAME_LIST_FILE = os.path.join(BASE_DIR, "taptap_game_list.xlsx")
-GAME_DETAIL_FILE = os.path.join(BASE_DIR, "taptap_game_detail.xlsx")
-RESULT_HTML_FILE = os.path.join(BASE_DIR, "taptap_maker_result.html")
 EXPORT_DIR = os.path.join(BASE_DIR, "export")
+DOCS_DIR = os.path.join(BASE_DIR, "docs")
 
 
-def main():
+def run_full_pipeline():
+    """全流程：爬取链接 → 同步数据库 → 爬取详情 → 生成 HTML"""
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     print("=" * 60)
     print("  TapTap 制造游戏数据爬取 — 全流程启动")
     print("=" * 60)
 
-    # 初始化数据库（含旧表兼容迁移）
+    os.makedirs(EXPORT_DIR, exist_ok=True)
+
     print("\n【初始化】检查数据库...")
     init_db()
     query_stats()
 
     # 阶段 1：爬取游戏链接
+    game_list_file = os.path.join(EXPORT_DIR, f"{ts}_taptap_game_list.xlsx")
     print("\n【阶段 1/4】爬取带 TapTap制造 标签的游戏链接...")
-    scrape_taptap(GAME_LIST_FILE)
+    scrape_taptap(game_list_file)
 
-    if not os.path.exists(GAME_LIST_FILE):
-        print(f"错误：阶段 1 未生成预期文件 {GAME_LIST_FILE}，流程终止。")
+    if not os.path.exists(game_list_file):
+        print(f"错误：阶段 1 未生成预期文件 {game_list_file}，流程终止。")
         return
 
     # 阶段 2：同步链接到数据库
     print("\n【阶段 2/4】同步新链接到数据库...")
-    sync_from_xlsx(GAME_LIST_FILE)
+    sync_from_xlsx(game_list_file)
 
     # 阶段 3：全量重新爬取详情
+    game_detail_file = os.path.join(EXPORT_DIR, f"{ts}_taptap_game_detail.xlsx")
     print("\n【阶段 3/4】爬取所有游戏的详细信息...")
     reset_all_pending()
-    crawl_taptap_games(GAME_DETAIL_FILE)
+    crawl_taptap_games(game_detail_file)
 
-    if not os.path.exists(GAME_DETAIL_FILE):
+    if not os.path.exists(game_detail_file):
         print("警告：阶段 3 未生成详情 Excel，可能无新游戏需要爬取。")
-        # 尝试用已有数据生成 HTML
         print("尝试从数据库已有记录生成展示页面...")
         import pandas as pd
         from init_db import get_conn
@@ -68,38 +72,31 @@ def main():
                 "followers": "关注量", "rating": "评分",
                 "rating_count": "评价数量",
             }, inplace=True)
-            df.to_excel(GAME_DETAIL_FILE, index=False)
-            print(f"已从数据库生成 {len(df)} 条记录到 {GAME_DETAIL_FILE}")
+            df.to_excel(game_detail_file, index=False)
+            print(f"已从数据库生成 {len(df)} 条记录到 {game_detail_file}")
         else:
             print("数据库中无已抓取详情的数据，跳过 HTML 生成。")
             return
 
     # 阶段 4：生成 HTML
+    result_html_file = os.path.join(EXPORT_DIR, f"{ts}_taptap_maker_result.html")
     print("\n【阶段 4/4】生成可视化 HTML 页面...")
-    excel_to_html(GAME_DETAIL_FILE, RESULT_HTML_FILE)
+    excel_to_html(game_detail_file, result_html_file)
 
-    # 导出备份
-    if os.path.exists(RESULT_HTML_FILE):
-        os.makedirs(EXPORT_DIR, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # 同步到 docs/ 用于 GitHub Pages 发布
+    if os.path.exists(result_html_file):
+        os.makedirs(DOCS_DIR, exist_ok=True)
+        docs_index = os.path.join(DOCS_DIR, "index.html")
+        shutil.copy2(result_html_file, docs_index)
+        print(f"\nGitHub Pages 页面已更新：{docs_index}")
 
-        export_detail = os.path.join(EXPORT_DIR, f"{ts}_taptap_game_detail.xlsx")
-        if os.path.exists(GAME_DETAIL_FILE):
-            shutil.copy2(GAME_DETAIL_FILE, export_detail)
-            print(f"\n📁 游戏详情已导出至：{export_detail}")
-
-        export_html = os.path.join(EXPORT_DIR, f"{ts}_taptap_maker_result.html")
-        shutil.copy2(RESULT_HTML_FILE, export_html)
-        print(f"📁 结果页面已导出至：{export_html}")
-
-    # 最终数据库统计
     query_stats()
 
     print("\n" + "=" * 60)
     print("  全流程完成！")
-    print(f"  游戏列表：{GAME_LIST_FILE}")
-    print(f"  游戏详情：{GAME_DETAIL_FILE}")
-    print(f"  结果页面：{RESULT_HTML_FILE}")
+    print(f"  游戏列表：{game_list_file}")
+    print(f"  游戏详情：{game_detail_file}")
+    print(f"  结果页面：{result_html_file}")
     print(f"  导出目录：{EXPORT_DIR}")
     print("=" * 60)
 
@@ -111,12 +108,13 @@ def show_menu():
     print("  1. 启动全流程（爬取链接 → 详情 → HTML）")
     print("  2. 查看数据库详细数据")
     print("  3. 导入链接文件到数据库")
+    print("  4. 查看爬取历史记录")
     print("  0. 退出")
     print("=" * 40)
 
     while True:
-        choice = input("请输入选项 [0-3]: ").strip()
-        if choice in ("0", "1", "2", "3"):
+        choice = input("请输入选项 [0-4]: ").strip()
+        if choice in ("0", "1", "2", "3", "4"):
             return choice
         print("无效选项，请重新输入")
 
@@ -129,16 +127,32 @@ def run_import():
         query_stats()
 
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser(description="TapTap Maker 游戏数据追踪系统")
+    parser.add_argument("--full", action="store_true", help="非交互模式：直接运行全流程")
+    args = parser.parse_args()
+
     init_db()
+
+    if args.full:
+        run_full_pipeline()
+        return
+
+    # 交互式菜单
     while True:
         choice = show_menu()
         if choice == "0":
             print("退出。")
             break
         elif choice == "1":
-            main()
+            run_full_pipeline()
         elif choice == "2":
             query_detailed()
         elif choice == "3":
             run_import()
+        elif choice == "4":
+            query_history()
+
+
+if __name__ == "__main__":
+    main()

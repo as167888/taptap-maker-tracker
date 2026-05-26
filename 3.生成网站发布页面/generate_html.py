@@ -30,6 +30,18 @@ def excel_to_html(input_file_path, output_file=None):
         print(f"读取文件失败: {e}")
         return
 
+    # 过滤掉无法获取游戏名称的行（游戏名称为"获取失败"或空）
+    name_col = '游戏名称' if '游戏名称' in df.columns else None
+    if name_col:
+        before = len(df)
+        df = df[df[name_col].notna() & (df[name_col] != '获取失败') & (df[name_col] != '未找到') & (df[name_col] != '')]
+        after = len(df)
+        if after < before:
+            print(f"已过滤 {before - after} 条无法获取游戏名称的记录")
+        if after == 0:
+            print("所有记录均无法获取游戏名称，跳过 HTML 页面生成。")
+            return
+
     # 将"请求链接"重命名为"游戏链接"，方便后续处理和页面展示
     if '请求链接' in df.columns:
         df.rename(columns={'请求链接': '游戏链接'}, inplace=True)

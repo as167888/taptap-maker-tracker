@@ -10,7 +10,7 @@ import random
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
-from init_db import get_pending_games, update_game_detail, mark_game_skipped, reset_all_pending
+from init_db import get_pending_games, update_game_detail, mark_game_skipped, reset_all_pending, save_crawl_record
 
 
 def crawl_taptap_games(output_file=None):
@@ -58,6 +58,7 @@ def crawl_taptap_games(output_file=None):
             if response.status_code == 404:
                 print(f"  -> 游戏已下线 (404)，标记跳过")
                 mark_game_skipped(game["id"])
+                save_crawl_record(game_data)
                 results.append(game_data)
                 continue
 
@@ -119,6 +120,9 @@ def crawl_taptap_games(output_file=None):
             print(f"  -> 请求失败: {e}，标记跳过")
             mark_game_skipped(game["id"])
 
+        # 每款游戏的爬取结果都保存到 crawl_history，带当前时间戳
+        save_crawl_record(game_data)
+
         results.append(game_data)
 
         time.sleep(random.uniform(1, 3))
@@ -145,4 +149,6 @@ def crawl_taptap_games(output_file=None):
 
 if __name__ == "__main__":
     reset_all_pending()
-    crawl_taptap_games("taptap_game_detail.xlsx")
+    _export = os.path.join(BASE_DIR, "export")
+    os.makedirs(_export, exist_ok=True)
+    crawl_taptap_games(os.path.join(_export, "taptap_game_detail.xlsx"))

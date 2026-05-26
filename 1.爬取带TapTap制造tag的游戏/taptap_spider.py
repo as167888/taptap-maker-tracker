@@ -102,4 +102,7 @@ def scrape_taptap(output_file=None):
         print("💔 抓取结束，未能获取到有效数据。")
 
 if __name__ == "__main__":
-    scrape_taptap("taptap_game_list.xlsx")
+    import os as _os
+    _export = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "export")
+    _os.makedirs(_export, exist_ok=True)
+    scrape_taptap(_os.path.join(_export, "taptap_game_list.xlsx"))

@@ -46,6 +46,20 @@ def init_db():
         if col_name not in existing:
             cur.execute(f"ALTER TABLE games ADD COLUMN {col_name} {col_type}")
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS crawl_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            game_name TEXT,
+            url TEXT,
+            published_date TEXT,
+            downloads TEXT,
+            followers TEXT,
+            rating TEXT,
+            rating_count TEXT,
+            crawl_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     conn.commit()
     return conn
 
@@ -168,6 +182,28 @@ def mark_game_skipped(game_id):
     cur.execute(
         "UPDATE games SET detail_fetched = -1, detail_updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (game_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_crawl_record(data):
+    """保存一条爬取记录到 crawl_history 表，带时间戳"""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO crawl_history
+           (game_name, url, published_date, downloads, followers, rating, rating_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (
+            data.get("游戏名称", ""),
+            data.get("请求链接", ""),
+            data.get("发布日期", ""),
+            data.get("下载量", ""),
+            data.get("关注量", ""),
+            data.get("评分", ""),
+            data.get("评价数量", ""),
+        ),
     )
     conn.commit()
     conn.close()
