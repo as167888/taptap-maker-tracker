@@ -42,6 +42,13 @@ def excel_to_html(input_file_path, output_file=None):
             print("所有记录均无法获取游戏名称，跳过 HTML 页面生成。")
             return
 
+    # 按下载量从大到小排列
+    if '下载量' in df.columns:
+        df['_sort_downloads'] = pd.to_numeric(
+            df['下载量'].astype(str).str.replace(',', '', regex=False), errors='coerce'
+        ).fillna(0)
+        df = df.sort_values('_sort_downloads', ascending=False).drop(columns=['_sort_downloads'])
+
     # 将"请求链接"重命名为"游戏链接"，方便后续处理和页面展示
     if '请求链接' in df.columns:
         df.rename(columns={'请求链接': '游戏链接'}, inplace=True)

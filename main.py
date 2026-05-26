@@ -83,12 +83,21 @@ def run_full_pipeline():
     print("\n【阶段 4/4】生成可视化 HTML 页面...")
     excel_to_html(game_detail_file, result_html_file)
 
-    # 同步到 docs/ 用于 GitHub Pages 发布
+    # 同步到 docs/ 用于 GitHub Pages 发布，并自动推送
     if os.path.exists(result_html_file):
         os.makedirs(DOCS_DIR, exist_ok=True)
         docs_index = os.path.join(DOCS_DIR, "index.html")
         shutil.copy2(result_html_file, docs_index)
         print(f"\nGitHub Pages 页面已更新：{docs_index}")
+
+        import subprocess
+        try:
+            subprocess.run(["git", "add", "docs/index.html", "export/", "taptap_games.db"], check=True, cwd=BASE_DIR)
+            subprocess.run(["git", "commit", "-m", f"auto: update data {ts}"], check=True, cwd=BASE_DIR)
+            subprocess.run(["git", "push"], check=True, cwd=BASE_DIR)
+            print("已自动推送到 GitHub，GitHub Pages 即将更新。")
+        except subprocess.CalledProcessError as e:
+            print(f"自动推送失败: {e}")
 
     query_stats()
 
